@@ -3,8 +3,8 @@ import type { GenerateInput } from '@/types';
 import { getApiKey } from './secure-store';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-20250514';
-const MAX_TOKENS = 8000;
+const MODEL = 'claude-sonnet-4-6';
+const MAX_TOKENS = 16000;
 const ANTHROPIC_VERSION = '2023-06-01';
 
 const SYSTEM_PROMPT = `You are a specialist at transforming books, films, documentaries, essays, albums, and other intellectual media into beautiful, deeply informative long-form articles formatted as self-contained HTML files.
