@@ -1,40 +1,51 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Essence design system.
+ * Dark-only editorial palette. Both Colors.light and Colors.dark map to the
+ * same dark theme so existing ThemedText / ThemedView components keep working
+ * without any changes.
  */
 
 import '@/global.css';
 
 import { Platform } from 'react-native';
 
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
+// Raw brand colors. Use these for specific UI accents.
+export const Palette = {
+  void: '#0d1117',       // deepest background
+  deep: '#161c26',       // screen background
+  surface: '#1e2735',    // cards, modals
+  line: '#2e3d52',       // borders, dividers
+  mist: '#f2f4f7',       // primary text on dark
+  inkMid: '#7a92aa',     // secondary text
+  inkSoft: '#4a6080',    // placeholder, disabled
+  blue: '#1a6dd6',       // primary accent
+  blueLight: '#3d8ef0',  // hover, active
+  cyan: '#0fa8aa',       // secondary accent
+  amber: '#c47d14',      // warnings, highlights
+  error: '#d63030',      // errors
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+// Semantic tokens consumed by the themed components.
+const darkTheme = {
+  text: Palette.mist,
+  textSecondary: Palette.inkMid,
+  background: Palette.deep,
+  backgroundElement: Palette.surface,
+  backgroundSelected: Palette.line,
+} as const;
+
+export const Colors = {
+  light: darkTheme,
+  dark: darkTheme,
+} as const;
+
+export type ThemeColor = keyof typeof darkTheme;
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
@@ -49,7 +60,7 @@ export const Fonts = Platform.select({
     rounded: 'var(--font-rounded)',
     mono: 'var(--font-mono)',
   },
-});
+}) as { sans: string; serif: string; rounded: string; mono: string };
 
 export const Spacing = {
   half: 2,
@@ -59,6 +70,12 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+export const Radius = {
+  sm: 4,
+  md: 8,
+  lg: 12,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
