@@ -44,3 +44,14 @@ export interface NewArticleInput {
   html: string;
   wordCount?: number | null;
 }
+
+/** Form input shape for article generation (Generate screen → lib/claude.ts). */
+export interface GenerateInput {
+  mediaType: MediaType;
+  title: string;
+  author?: string;
+  year?: string;
+  genre?: string;
+  toneNotes?: string;
+  focusNotes?: string;
+}
