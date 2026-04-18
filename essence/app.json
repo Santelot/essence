@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "essence",
+    "name": "Essence",
     "slug": "essence",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,8 +11,10 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.santelot.essence",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#07080c",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0d1117",
+          "backgroundColor": "#07080c",
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
@@ -40,6 +42,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6f6fe923-b5e4-4c41-a8f2-f7cca1f41b55"
+      }
     }
   }
 }
