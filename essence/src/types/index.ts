@@ -1,4 +1,12 @@
-export type MediaType = 'book' | 'film' | 'album' | 'essay' | 'course';
+export type MediaType =
+  | 'book'
+  | 'film'
+  | 'album'
+  | 'essay'
+  | 'course'
+  | 'topic';
+
+export type TopicDepth = 'primer' | 'standard' | 'deep';
 
 export interface Article {
   id: string;
@@ -8,15 +16,14 @@ export interface Article {
   mediaType: MediaType;
   genre: string | null;
   html: string;
-  createdAt: string;       // ISO timestamp
-  readAt: string | null;   // null = unread
+  createdAt: string;
+  readAt: string | null;
   isSynced: boolean;
   isOffline: boolean;
   wordCount: number | null;
-  readProgress: number;    // 0.0 – 1.0
+  readProgress: number;
 }
 
-/** Raw SQLite row shape — pre-conversion. */
 export interface ArticleRow {
   id: string;
   title: string;
@@ -33,9 +40,8 @@ export interface ArticleRow {
   read_progress: number;
 }
 
-/** Input shape for creating a new article. */
 export interface NewArticleInput {
-  id?: string;              // optional; db.ts generates one if missing
+  id?: string;
   title: string;
   source: string;
   author?: string | null;
@@ -45,7 +51,6 @@ export interface NewArticleInput {
   wordCount?: number | null;
 }
 
-/** Form input shape for article generation (Generate screen → lib/claude.ts). */
 export interface GenerateInput {
   mediaType: MediaType;
   title: string;
@@ -54,9 +59,9 @@ export interface GenerateInput {
   genre?: string;
   toneNotes?: string;
   focusNotes?: string;
+  depth?: TopicDepth; // Only used when mediaType === 'topic'
 }
 
-/** Shape used when inserting an article pulled down from Supabase. */
 export interface CloudArticleData {
   id: string;
   title: string;

@@ -7,14 +7,15 @@ import type {
   NewArticleInput,
 } from '@/types';
 
+import { isOnline } from './network';
 import { seedArticles } from './seed-articles';
+import { getSupabaseClient } from './supabase';
 
 const DB_NAME = 'essence.db';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-/** RFC 4122 v4 UUID. Not cryptographic — fine for local article IDs. */
 function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
@@ -83,8 +84,6 @@ export async function initDatabase(): Promise<void> {
     for (const seed of seedArticles) {
       await createArticle(seed);
     }
-    // Mark seeds as already-synced so they don't upload to your personal
-    // Supabase instance on first sync. They're client-side demo data.
     await db.runAsync('UPDATE articles SET is_synced = 1 WHERE is_synced = 0');
   }
 }
@@ -152,8 +151,31 @@ export async function markAsRead(id: string): Promise<void> {
   );
 }
 
+/**
+ * Delete locally and attempt cloud delete too. If the cloud delete fails
+ * (offline, Supabase unreachable, whatever), we still delete locally — the
+ * user's intent is clear, and a later manual sync won't resurrect it because
+ * the row is gone from the local DB and won't be pushed.
+ *
+ * Tradeoff: if the cloud delete fails silently, and the user syncs from
+ * another device, that device will still have it. Acceptable for v1.
+ */
 export async function deleteArticle(id: string): Promise<void> {
   const db = await getDb();
+
+  // Best-effort cloud delete first.
+  try {
+    const client = await getSupabaseClient();
+    if (client && (await isOnline())) {
+      const { error } = await client.from('articles').delete().eq('id', id);
+      if (error) {
+        console.warn(`delete: cloud delete failed for ${id}`, error);
+      }
+    }
+  } catch (err) {
+    console.warn(`delete: cloud delete threw for ${id}`, err);
+  }
+
   await db.runAsync('DELETE FROM articles WHERE id = ?', [id]);
 }
 
@@ -170,18 +192,12 @@ export async function getUnsyncedArticles(): Promise<Article[]> {
   return rows.map(rowToArticle);
 }
 
-/** For sync: returns just the IDs so we can quickly diff local vs cloud. */
 export async function getAllArticleIds(): Promise<string[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM articles');
   return rows.map((r) => r.id);
 }
 
-/**
- * Insert an article pulled from Supabase, preserving the cloud's id,
- * created_at, read state, etc. INSERT OR IGNORE is a defensive guard
- * against race conditions where another sync path already inserted it.
- */
 export async function createArticleFromCloud(
   data: CloudArticleData
 ): Promise<void> {

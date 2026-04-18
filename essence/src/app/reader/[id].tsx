@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
-import { Fonts, Palette, Spacing } from '@/constants/theme';
+import { Fonts, Glass, Palette, Spacing } from '@/constants/theme';
 import { getArticleById, markAsRead } from '@/lib/db';
 import type { Article } from '@/types';
 
@@ -34,7 +34,6 @@ export default function ReaderScreen() {
           return;
         }
         setArticle(found);
-        // Fire-and-forget — don't block rendering on this.
         markAsRead(id).catch((err) =>
           console.warn('Reader: markAsRead failed', err)
         );
@@ -61,7 +60,7 @@ export default function ReaderScreen() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ReaderHeader title="Loading…" onBack={() => router.back()} />
         <View style={styles.center}>
-          <ActivityIndicator color={Palette.blueLight} />
+          <ActivityIndicator color={Palette.glow} />
         </View>
       </SafeAreaView>
     );
@@ -79,10 +78,8 @@ export default function ReaderScreen() {
         source={{ html: article.html }}
         style={styles.webview}
         containerStyle={styles.webviewContainer}
-        // Dark background to avoid white flash before the article CSS loads.
-        // react-native-webview honors this on both platforms.
         // ts-expect-error — `backgroundColor` is a valid WebView prop at runtime.
-        backgroundColor={Palette.deep}
+        backgroundColor={Palette.ink}
         javaScriptEnabled
         domStorageEnabled
         allowsInlineMediaPlayback
@@ -102,20 +99,25 @@ function ReaderHeader({
   onBack: () => void;
 }) {
   return (
-    <View style={styles.header}>
-      <Pressable
-        onPress={onBack}
-        hitSlop={12}
-        style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-        <Text style={styles.backArrow}>←</Text>
-      </Pressable>
-      <View style={styles.headerTextWrap}>
-        {mediaType && (
-          <Text style={styles.headerKicker}>{mediaType.toUpperCase()}</Text>
-        )}
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {title}
-        </Text>
+    <View style={styles.headerWrap}>
+      <View style={styles.headerInner}>
+        <Pressable
+          onPress={onBack}
+          hitSlop={12}
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.backArrow}>←</Text>
+        </Pressable>
+        <View style={styles.headerTextWrap}>
+          {mediaType && (
+            <Text style={styles.headerKicker}>{mediaType.toUpperCase()}</Text>
+          )}
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -124,30 +126,35 @@ function ReaderHeader({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Palette.deep,
+    backgroundColor: Palette.ink,
   },
-  header: {
+  headerWrap: {
+    backgroundColor: Palette.night,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Glass.borderCool,
+  },
+  headerInner: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     gap: Spacing.three,
-    backgroundColor: Palette.void,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Palette.line,
   },
   backButton: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 18,
   },
   backArrow: {
     color: Palette.mist,
     fontSize: 24,
+    fontWeight: '300',
   },
   pressed: {
     opacity: 0.5,
+    transform: [{ scale: 0.96 }],
   },
   headerTextWrap: {
     flex: 1,
@@ -155,21 +162,23 @@ const styles = StyleSheet.create({
   headerKicker: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    letterSpacing: 1.8,
-    color: Palette.cyan,
+    letterSpacing: 2,
+    color: Palette.glow,
+    fontWeight: '700',
   },
   headerTitle: {
     fontFamily: Fonts.serif,
     fontSize: 17,
     color: Palette.mist,
     marginTop: 2,
+    fontWeight: '500',
   },
   webview: {
     flex: 1,
-    backgroundColor: Palette.deep,
+    backgroundColor: Palette.ink,
   },
   webviewContainer: {
-    backgroundColor: Palette.deep,
+    backgroundColor: Palette.ink,
   },
   center: {
     flex: 1,
