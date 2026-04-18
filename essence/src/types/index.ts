@@ -55,3 +55,18 @@ export interface GenerateInput {
   toneNotes?: string;
   focusNotes?: string;
 }
+
+/** Shape used when inserting an article pulled down from Supabase. */
+export interface CloudArticleData {
+  id: string;
+  title: string;
+  source: string;
+  author: string | null;
+  mediaType: MediaType;
+  genre: string | null;
+  html: string;
+  createdAt: string;
+  readAt: string | null;
+  wordCount: number | null;
+  readProgress: number;
+}

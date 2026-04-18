@@ -18,10 +18,12 @@ import {
   Spacing,
 } from '@/constants/theme';
 import { getAllArticles } from '@/lib/db';
+import { useOnlineStatus } from '@/lib/network';
 import type { Article } from '@/types';
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const online = useOnlineStatus();
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,6 @@ export default function LibraryScreen() {
     }
   }, []);
 
-  // Reload on focus so newly-generated or newly-read articles appear.
   useFocusEffect(
     useCallback(() => {
       load();
@@ -61,6 +62,7 @@ export default function LibraryScreen() {
         <Text style={styles.brand}>Essence</Text>
         <Text style={styles.count}>
           {articles.length} {articles.length === 1 ? 'article' : 'articles'}
+          {!online && <Text style={styles.offline}> · offline</Text>}
         </Text>
       </View>
 
@@ -87,7 +89,10 @@ export default function LibraryScreen() {
           <ArticleCard
             article={item}
             onPress={() =>
-              router.push({ pathname: '/reader/[id]' as any, params: { id: item.id } })
+              router.push({
+                pathname: '/reader/[id]' as any,
+                params: { id: item.id },
+              })
             }
           />
         )}
@@ -105,7 +110,9 @@ function ArticleCard({
 }) {
   const isUnread = article.readAt === null;
   const minutes =
-    article.wordCount !== null ? Math.max(1, Math.ceil(article.wordCount / 250)) : null;
+    article.wordCount !== null
+      ? Math.max(1, Math.ceil(article.wordCount / 250))
+      : null;
 
   return (
     <Pressable
@@ -119,27 +126,19 @@ function ArticleCard({
         {article.title}
       </Text>
       <Text style={styles.cardSource} numberOfLines={1}>
-        {article.author ? `${article.author} · ${article.source}` : article.source}
+        {article.author ?? article.source}
       </Text>
-      <View style={styles.cardBottomRow}>
-        {minutes !== null && (
-          <Text style={styles.cardMeta}>{minutes} MIN READ</Text>
-        )}
-        {article.readProgress > 0 && article.readProgress < 1 && (
-          <Text style={styles.cardMeta}>
-            {Math.round(article.readProgress * 100)}%
-          </Text>
-        )}
-      </View>
+      {minutes !== null && (
+        <Text style={styles.cardMeta}>
+          {minutes} min · {article.wordCount?.toLocaleString()} words
+        </Text>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Palette.deep,
-  },
+  safe: { flex: 1, backgroundColor: Palette.deep },
   loading: {
     flex: 1,
     alignItems: 'center',
@@ -167,40 +166,44 @@ const styles = StyleSheet.create({
   },
   count: {
     fontFamily: Fonts.mono,
-    fontSize: 11,
+    fontSize: 12,
+    color: Palette.inkMid,
+    marginTop: Spacing.one,
     letterSpacing: 1,
-    color: Palette.inkSoft,
-    marginTop: Spacing.two,
+  },
+  offline: {
+    color: Palette.amber,
   },
   errorBar: {
-    backgroundColor: Palette.error,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    backgroundColor: Palette.surface,
+    borderColor: Palette.error,
+    borderWidth: 1,
+    marginHorizontal: Spacing.three,
+    marginTop: Spacing.two,
+    padding: Spacing.two,
+    borderRadius: Radius.sm,
   },
   errorText: {
-    color: Palette.mist,
     fontFamily: Fonts.sans,
     fontSize: 13,
+    color: Palette.error,
   },
   list: {
     padding: Spacing.three,
     paddingBottom: BottomTabInset + Spacing.four,
-    flexGrow: 1,
   },
   separator: {
     height: Spacing.three,
   },
   empty: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.six,
-    gap: Spacing.two,
+    paddingVertical: Spacing.four,
   },
   emptyTitle: {
     fontFamily: Fonts.serif,
     fontSize: 20,
     color: Palette.mist,
+    marginBottom: Spacing.two,
   },
   emptyBody: {
     fontFamily: Fonts.sans,
@@ -210,52 +213,49 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: Palette.surface,
-    borderWidth: 1,
     borderColor: Palette.line,
+    borderWidth: 1,
     borderRadius: Radius.md,
     padding: Spacing.three,
-    gap: Spacing.two,
   },
   cardPressed: {
-    opacity: 0.7,
+    opacity: 0.85,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: Spacing.two,
   },
   cardMediaType: {
     fontFamily: Fonts.mono,
     fontSize: 10,
-    letterSpacing: 1.8,
-    color: Palette.cyan,
+    letterSpacing: 2,
+    color: Palette.blueLight,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Palette.blueLight,
+    backgroundColor: Palette.cyan,
   },
   cardTitle: {
     fontFamily: Fonts.serif,
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 22,
     color: Palette.mist,
+    lineHeight: 28,
+    marginBottom: Spacing.one,
   },
   cardSource: {
     fontFamily: Fonts.sans,
     fontSize: 13,
     color: Palette.inkMid,
-  },
-  cardBottomRow: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    marginTop: Spacing.one,
+    marginBottom: Spacing.one,
   },
   cardMeta: {
     fontFamily: Fonts.mono,
-    fontSize: 10,
-    letterSpacing: 1.2,
+    fontSize: 11,
     color: Palette.inkSoft,
+    letterSpacing: 0.5,
   },
 });

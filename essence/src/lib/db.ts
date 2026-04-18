@@ -1,6 +1,12 @@
 import * as SQLite from 'expo-sqlite';
 
-import type { Article, ArticleRow, NewArticleInput } from '@/types';
+import type {
+  Article,
+  ArticleRow,
+  CloudArticleData,
+  NewArticleInput,
+} from '@/types';
+
 import { seedArticles } from './seed-articles';
 
 const DB_NAME = 'essence.db';
@@ -42,10 +48,6 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
-/**
- * Lazy singleton. Every query awaits this, so the Library screen's first
- * load naturally waits on init even if it races with the _layout's init call.
- */
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
   if (!initPromise) initPromise = openAndMigrate();
@@ -71,10 +73,6 @@ function rowToArticle(row: ArticleRow): Article {
   };
 }
 
-/**
- * Opens the DB, runs migrations, and seeds mock articles if the library
- * is empty. Safe to call multiple times.
- */
 export async function initDatabase(): Promise<void> {
   const db = await getDb();
   const countRow = await db.getFirstAsync<{ count: number }>(
@@ -85,6 +83,9 @@ export async function initDatabase(): Promise<void> {
     for (const seed of seedArticles) {
       await createArticle(seed);
     }
+    // Mark seeds as already-synced so they don't upload to your personal
+    // Supabase instance on first sync. They're client-side demo data.
+    await db.runAsync('UPDATE articles SET is_synced = 1 WHERE is_synced = 0');
   }
 }
 
@@ -131,7 +132,6 @@ export async function createArticle(input: NewArticleInput): Promise<Article> {
   return created;
 }
 
-/** Only increases — never moves read_progress backwards. */
 export async function updateReadProgress(
   id: string,
   progress: number
@@ -168,4 +168,41 @@ export async function getUnsyncedArticles(): Promise<Article[]> {
     'SELECT * FROM articles WHERE is_synced = 0 ORDER BY created_at ASC'
   );
   return rows.map(rowToArticle);
+}
+
+/** For sync: returns just the IDs so we can quickly diff local vs cloud. */
+export async function getAllArticleIds(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM articles');
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Insert an article pulled from Supabase, preserving the cloud's id,
+ * created_at, read state, etc. INSERT OR IGNORE is a defensive guard
+ * against race conditions where another sync path already inserted it.
+ */
+export async function createArticleFromCloud(
+  data: CloudArticleData
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR IGNORE INTO articles
+      (id, title, source, author, media_type, genre, html,
+       created_at, read_at, is_synced, is_offline, word_count, read_progress)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+    [
+      data.id,
+      data.title,
+      data.source,
+      data.author,
+      data.mediaType,
+      data.genre,
+      data.html,
+      data.createdAt,
+      data.readAt,
+      data.wordCount,
+      data.readProgress,
+    ]
+  );
 }

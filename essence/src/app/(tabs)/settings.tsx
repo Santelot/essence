@@ -15,22 +15,41 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Fonts, Palette, Radius, Spacing } from '@/constants/theme';
-import { clearApiKey, getApiKey, setApiKey } from '../../lib/secure-store';
+import { clearApiKey, getApiKey, setApiKey } from '@/lib/secure-store';
+import {
+  clearSupabaseConfig,
+  getSupabaseConfig,
+  setSupabaseConfig,
+  type SupabaseConfig,
+} from '@/lib/supabase';
+import { syncAll, type SyncStatus } from '@/lib/sync';
 
 export default function SettingsScreen() {
+  // --- API key state ---
   const [loading, setLoading] = useState(true);
   const [existingKey, setExistingKey] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [editingKey, setEditingKey] = useState(false);
+  const [keyDraft, setKeyDraft] = useState('');
+  const [savingKey, setSavingKey] = useState(false);
+
+  // --- Supabase state ---
+  const [sbConfig, setSbConfig] = useState<SupabaseConfig | null>(null);
+  const [editingSb, setEditingSb] = useState(false);
+  const [sbUrlDraft, setSbUrlDraft] = useState('');
+  const [sbKeyDraft, setSbKeyDraft] = useState('');
+  const [savingSb, setSavingSb] = useState(false);
+
+  // --- Sync state ---
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ type: 'idle' });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const key = await getApiKey();
+      const [key, cfg] = await Promise.all([getApiKey(), getSupabaseConfig()]);
       setExistingKey(key);
-      // If nothing stored, open the editor by default.
-      setEditing(!key);
+      setEditingKey(!key);
+      setSbConfig(cfg);
+      setEditingSb(!cfg);
     } catch (err) {
       console.error('Settings: load failed', err);
     } finally {
@@ -44,27 +63,29 @@ export default function SettingsScreen() {
     }, [load])
   );
 
-  const handleSave = async () => {
-    const trimmed = draft.trim();
+  // --- API key handlers ---
+
+  const handleSaveKey = async () => {
+    const trimmed = keyDraft.trim();
     if (!trimmed) {
       Alert.alert('Missing key', 'Paste an Anthropic API key to continue.');
       return;
     }
-    setSaving(true);
+    setSavingKey(true);
     try {
       await setApiKey(trimmed);
       setExistingKey(trimmed);
-      setDraft('');
-      setEditing(false);
+      setKeyDraft('');
+      setEditingKey(false);
     } catch (err) {
-      console.error('Settings: save failed', err);
+      console.error('Settings: save key failed', err);
       Alert.alert('Could not save', 'Something went wrong. Try again.');
     } finally {
-      setSaving(false);
+      setSavingKey(false);
     }
   };
 
-  const handleClear = () => {
+  const handleClearKey = () => {
     Alert.alert(
       'Remove API key?',
       'You will need to paste it again to generate new articles.',
@@ -77,10 +98,10 @@ export default function SettingsScreen() {
             try {
               await clearApiKey();
               setExistingKey(null);
-              setDraft('');
-              setEditing(true);
+              setKeyDraft('');
+              setEditingKey(true);
             } catch (err) {
-              console.error('Settings: clear failed', err);
+              console.error('Settings: clear key failed', err);
               Alert.alert('Could not remove', 'Try again.');
             }
           },
@@ -89,9 +110,100 @@ export default function SettingsScreen() {
     );
   };
 
+  // --- Supabase handlers ---
+
+  const handleSaveSb = async () => {
+    const url = sbUrlDraft.trim();
+    const anonKey = sbKeyDraft.trim();
+    if (!url || !anonKey) {
+      Alert.alert('Missing fields', 'Both the URL and the anon key are required.');
+      return;
+    }
+    setSavingSb(true);
+    try {
+      await setSupabaseConfig({ url, anonKey });
+      setSbConfig({ url: url.replace(/\/+$/, ''), anonKey });
+      setSbUrlDraft('');
+      setSbKeyDraft('');
+      setEditingSb(false);
+      // Fire a sync immediately so the user gets fast feedback.
+      void handleSyncNow();
+    } catch (err) {
+      console.error('Settings: save Supabase config failed', err);
+      Alert.alert(
+        'Could not save',
+        err instanceof Error ? err.message : 'Try again.'
+      );
+    } finally {
+      setSavingSb(false);
+    }
+  };
+
+  const handleClearSb = () => {
+    Alert.alert(
+      'Disconnect cloud sync?',
+      'Local articles stay on this device. The cloud database is not deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearSupabaseConfig();
+              setSbConfig(null);
+              setSbUrlDraft('');
+              setSbKeyDraft('');
+              setEditingSb(true);
+              setSyncStatus({ type: 'idle' });
+            } catch (err) {
+              console.error('Settings: clear Supabase failed', err);
+              Alert.alert('Could not disconnect', 'Try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSyncNow = async () => {
+    setSyncStatus({ type: 'syncing' });
+    const result = await syncAll();
+    setSyncStatus(result);
+  };
+
+  // --- Rendering helpers ---
+
   const maskKey = (k: string) => {
     if (k.length <= 10) return '•'.repeat(k.length);
     return `${k.slice(0, 7)}${'•'.repeat(12)}${k.slice(-4)}`;
+  };
+
+  const maskUrl = (u: string) => {
+    // Show the subdomain, mask the rest. Useful to confirm it's the right project.
+    try {
+      const host = u.replace(/^https?:\/\//, '').split('/')[0];
+      return host;
+    } catch {
+      return u;
+    }
+  };
+
+  const syncStatusText = (): string => {
+    switch (syncStatus.type) {
+      case 'idle':
+        return '';
+      case 'syncing':
+        return 'Syncing…';
+      case 'success':
+        return `Synced · ${syncStatus.pushed} sent, ${syncStatus.pulled} received`;
+      case 'error':
+        return `Sync failed: ${syncStatus.message}`;
+      case 'skipped':
+        return syncStatus.reason === 'offline'
+          ? 'Offline — will sync when connected'
+          : 'Connect Supabase above first';
+    }
   };
 
   return (
@@ -107,13 +219,14 @@ export default function SettingsScreen() {
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled">
+          {/* ---------- ANTHROPIC API KEY ---------- */}
           <Text style={styles.sectionLabel}>ANTHROPIC API KEY</Text>
 
           {loading ? (
             <View style={styles.loadingBlock}>
               <ActivityIndicator color={Palette.blueLight} />
             </View>
-          ) : existingKey && !editing ? (
+          ) : existingKey && !editingKey ? (
             <View style={styles.card}>
               <Text style={styles.maskedKey}>{maskKey(existingKey)}</Text>
               <Text style={styles.helper}>
@@ -122,8 +235,8 @@ export default function SettingsScreen() {
               <View style={styles.buttonRow}>
                 <Pressable
                   onPress={() => {
-                    setDraft('');
-                    setEditing(true);
+                    setKeyDraft('');
+                    setEditingKey(true);
                   }}
                   style={({ pressed }) => [
                     styles.secondaryButton,
@@ -132,7 +245,7 @@ export default function SettingsScreen() {
                   <Text style={styles.secondaryButtonText}>Replace</Text>
                 </Pressable>
                 <Pressable
-                  onPress={handleClear}
+                  onPress={handleClearKey}
                   style={({ pressed }) => [
                     styles.dangerButton,
                     pressed && styles.pressed,
@@ -144,15 +257,15 @@ export default function SettingsScreen() {
           ) : (
             <View style={styles.card}>
               <TextInput
-                value={draft}
-                onChangeText={setDraft}
+                value={keyDraft}
+                onChangeText={setKeyDraft}
                 placeholder="sk-ant-..."
                 placeholderTextColor={Palette.inkSoft}
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
                 secureTextEntry
-                editable={!saving}
+                editable={!savingKey}
               />
               <Text style={styles.helper}>
                 Get a key at console.anthropic.com. Stored securely on this
@@ -162,8 +275,8 @@ export default function SettingsScreen() {
                 {existingKey && (
                   <Pressable
                     onPress={() => {
-                      setDraft('');
-                      setEditing(false);
+                      setKeyDraft('');
+                      setEditingKey(false);
                     }}
                     style={({ pressed }) => [
                       styles.secondaryButton,
@@ -173,14 +286,14 @@ export default function SettingsScreen() {
                   </Pressable>
                 )}
                 <Pressable
-                  onPress={handleSave}
-                  disabled={saving || !draft.trim()}
+                  onPress={handleSaveKey}
+                  disabled={savingKey || !keyDraft.trim()}
                   style={({ pressed }) => [
                     styles.primaryButton,
-                    (saving || !draft.trim()) && styles.disabled,
+                    (savingKey || !keyDraft.trim()) && styles.disabled,
                     pressed && styles.pressed,
                   ]}>
-                  {saving ? (
+                  {savingKey ? (
                     <ActivityIndicator color={Palette.mist} />
                   ) : (
                     <Text style={styles.primaryButtonText}>Save</Text>
@@ -190,14 +303,132 @@ export default function SettingsScreen() {
             </View>
           )}
 
+          {/* ---------- SUPABASE CLOUD SYNC ---------- */}
           <Text style={[styles.sectionLabel, styles.nextSection]}>
             CLOUD SYNC
           </Text>
-          <View style={styles.card}>
-            <Text style={styles.placeholder}>
-              Supabase configuration arrives in Phase 3.
-            </Text>
-          </View>
+
+          {loading ? null : sbConfig && !editingSb ? (
+            <View style={styles.card}>
+              <Text style={styles.maskedKey}>{maskUrl(sbConfig.url)}</Text>
+              <Text style={styles.helper}>
+                Connected. Articles sync when the app is opened or returns to
+                the foreground.
+              </Text>
+              <View style={styles.buttonRow}>
+                <Pressable
+                  onPress={() => {
+                    setSbUrlDraft('');
+                    setSbKeyDraft('');
+                    setEditingSb(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text style={styles.secondaryButtonText}>Replace</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleClearSb}
+                  style={({ pressed }) => [
+                    styles.dangerButton,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text style={styles.dangerButtonText}>Disconnect</Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                onPress={handleSyncNow}
+                disabled={syncStatus.type === 'syncing'}
+                style={({ pressed }) => [
+                  styles.syncButton,
+                  syncStatus.type === 'syncing' && styles.disabled,
+                  pressed && styles.pressed,
+                ]}>
+                {syncStatus.type === 'syncing' ? (
+                  <ActivityIndicator color={Palette.mist} />
+                ) : (
+                  <Text style={styles.syncButtonText}>Sync now</Text>
+                )}
+              </Pressable>
+              {!!syncStatusText() && (
+                <Text
+                  style={[
+                    styles.syncStatusText,
+                    syncStatus.type === 'error' && styles.syncStatusError,
+                  ]}>
+                  {syncStatusText()}
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.miniLabel}>PROJECT URL</Text>
+              <TextInput
+                value={sbUrlDraft}
+                onChangeText={setSbUrlDraft}
+                placeholder="https://xxxxx.supabase.co"
+                placeholderTextColor={Palette.inkSoft}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                editable={!savingSb}
+              />
+              <Text style={[styles.miniLabel, styles.miniLabelGap]}>
+                ANON KEY
+              </Text>
+              <TextInput
+                value={sbKeyDraft}
+                onChangeText={setSbKeyDraft}
+                placeholder="eyJ..."
+                placeholderTextColor={Palette.inkSoft}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+                editable={!savingSb}
+              />
+              <Text style={styles.helper}>
+                Both values come from Project Settings → API in your Supabase
+                dashboard. Stored securely on this device.
+              </Text>
+              <View style={styles.buttonRow}>
+                {sbConfig && (
+                  <Pressable
+                    onPress={() => {
+                      setSbUrlDraft('');
+                      setSbKeyDraft('');
+                      setEditingSb(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={handleSaveSb}
+                  disabled={
+                    savingSb || !sbUrlDraft.trim() || !sbKeyDraft.trim()
+                  }
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    (savingSb || !sbUrlDraft.trim() || !sbKeyDraft.trim()) &&
+                      styles.disabled,
+                    pressed && styles.pressed,
+                  ]}>
+                  {savingSb ? (
+                    <ActivityIndicator color={Palette.mist} />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -254,10 +485,20 @@ const styles = StyleSheet.create({
   },
   maskedKey: {
     fontFamily: Fonts.mono,
-    fontSize: 16,
+    fontSize: 15,
     color: Palette.mist,
     marginBottom: Spacing.two,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+  },
+  miniLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.8,
+    color: Palette.inkMid,
+    marginBottom: Spacing.one,
+  },
+  miniLabelGap: {
+    marginTop: Spacing.two,
   },
   helper: {
     fontFamily: Fonts.sans,
@@ -276,7 +517,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.two,
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.one,
     minHeight: 42,
   },
   buttonRow: {
@@ -339,9 +580,29 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.8,
   },
-  placeholder: {
+  syncButton: {
+    marginTop: Spacing.three,
+    backgroundColor: Palette.cyan,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+  },
+  syncButtonText: {
     fontFamily: Fonts.sans,
     fontSize: 14,
+    fontWeight: '600',
+    color: Palette.mist,
+  },
+  syncStatusText: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
     color: Palette.inkMid,
+    marginTop: Spacing.two,
+    textAlign: 'center',
+  },
+  syncStatusError: {
+    color: Palette.error,
   },
 });
